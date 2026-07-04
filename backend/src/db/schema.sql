@@ -32,7 +32,7 @@
 -- ============================================================
 
 CREATE TYPE user_role AS ENUM ('admin', 'staff');
-CREATE TYPE tahap_status AS ENUM ('Belum Mulai', 'Proses', 'Selesai', 'Tertunda');
+CREATE TYPE tahap_status AS ENUM ('Belum Mulai', 'Proses', 'Selesai', 'Tertunda', 'Batal');
 
 -- 1. USERS
 CREATE TABLE users (

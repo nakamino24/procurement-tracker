@@ -1,6 +1,6 @@
 const pool = require('../config/db');
 
-const STATUS_VALID = ['Belum Mulai', 'Proses', 'Selesai', 'Tertunda'];
+const STATUS_VALID = ['Belum Mulai', 'Proses', 'Selesai', 'Tertunda', 'Batal'];
 
 // PUT /api/tahapan/:id  body: { status, catatan }
 // Aturan bisnis "harus berurutan": tahap ini hanya boleh diubah jadi
