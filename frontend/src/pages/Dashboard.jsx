@@ -12,15 +12,13 @@ export default function Dashboard() {
     api.get('/dashboard/summary').then((res) => setData(res.data)).finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <Layout><p className="text-ink-600">Memuat data...</p></Layout>;
+  if (loading) return <Layout title="Dashboard"><p className="text-ink-600">Memuat data...</p></Layout>;
 
   return (
-    <Layout>
-      <h1 className="font-display text-2xl text-ink-900 mb-6">Ringkasan Dashboard</h1>
-
+    <Layout title="Dashboard">
       <div className="grid md:grid-cols-2 gap-6 mb-8">
         {/* Stuck per tahap */}
-        <div className="bg-white rounded-lg shadow p-5">
+        <div className="bg-white rounded-xl shadow-sm p-5">
           <h2 className="font-semibold text-ink-800 mb-3">Pengadaan Stuck per Tahap</h2>
           {data.stuck_per_tahap.length === 0 && <p className="text-sm text-ink-400">Tidak ada yang stuck. 🎉</p>}
           <ul className="space-y-2">
@@ -34,7 +32,7 @@ export default function Dashboard() {
         </div>
 
         {/* Rata-rata durasi */}
-        <div className="bg-white rounded-lg shadow p-5">
+        <div className="bg-white rounded-xl shadow-sm p-5">
           <h2 className="font-semibold text-ink-800 mb-3">Rata-rata Durasi per Tahap (hari)</h2>
           {data.avg_durasi_per_tahap.length === 0 && <p className="text-sm text-ink-400">Belum ada data selesai.</p>}
           <ul className="space-y-2">
@@ -49,7 +47,7 @@ export default function Dashboard() {
       </div>
 
       {/* Progress per item */}
-      <div className="bg-white rounded-lg shadow p-5">
+      <div className="bg-white rounded-xl shadow-sm p-5">
         <h2 className="font-semibold text-ink-800 mb-4">Progress per Pengadaan</h2>
         <div className="space-y-4">
           {data.progress_items.map((item) => (

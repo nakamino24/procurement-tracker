@@ -37,20 +37,19 @@ export default function PengadaanDetail() {
     }
   }
 
-  if (!data) return <Layout><p className="text-ink-600">Memuat...</p></Layout>;
+  if (!data) return <Layout title="Detail Pengadaan"><p className="text-ink-600">Memuat...</p></Layout>;
 
   return (
-    <Layout>
+    <Layout title={data.nama_pengadaan}>
       <div className="mb-6">
-        <h1 className="font-display text-2xl text-ink-900">{data.nama_pengadaan}</h1>
         <p className="text-ink-600 text-sm mt-1">
-          Vendor: {data.vendor || '-'} · PIC: {data.pic || '-'} · Nilai: Rp{Number(data.nilai_kontrak).toLocaleString('id-ID')}
+          Vendor: {data.vendor || '-'} · PIC: {data.pic_nama || data.pic || '-'} · Nilai: Rp{Number(data.nilai_kontrak).toLocaleString('id-ID')}
         </p>
       </div>
 
       {error && <div className="bg-red-50 text-red-700 text-sm rounded p-3 mb-4">{error}</div>}
 
-      <div className="bg-white rounded-lg shadow divide-y divide-ink-100">
+      <div className="bg-white rounded-xl shadow-sm divide-y divide-ink-100">
         {data.tahapan.map((t) => (
           <div key={t.id} className="p-4 flex items-center justify-between gap-4">
             <div className="flex-1">
