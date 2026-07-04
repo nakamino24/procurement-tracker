@@ -1,10 +1,9 @@
-
 // Satu pool koneksi dipakai di seluruh aplikasi (best practice pg).
 // Pool = kumpulan koneksi yang di-reuse, jadi tiap query tidak perlu
 // buka-tutup koneksi baru (mahal & lambat).
 require('dotenv').config();
 const { Pool } = require('pg');
- 
+
 // Kalau DATABASE_URL disediakan (misal di Railway/Render saat production),
 // pakai itu. Kalau tidak, susun dari variabel terpisah (PGHOST, PGUSER, dst)
 // -- cara ini lebih tahan terhadap isu parsing URL yang sering muncul di
@@ -21,9 +20,9 @@ const pool = process.env.DATABASE_URL
       password: String(process.env.PGPASSWORD || ''),
       database: process.env.PGDATABASE || 'procurement_db',
     });
- 
+
 pool.on('error', (err) => {
   console.error('Unexpected DB pool error:', err);
 });
- 
+
 module.exports = pool;

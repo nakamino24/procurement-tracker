@@ -26,6 +26,13 @@ async function updateStatus(req, res) {
     const tahap = current.rows[0];
     if (!tahap) return res.status(404).json({ message: 'Tahapan tidak ditemukan.' });
 
+    if (req.user.role === 'staff') {
+      const owner = await pool.query('SELECT pic_user_id FROM pengadaan WHERE id = $1', [tahap.pengadaan_id]);
+      if (owner.rows[0]?.pic_user_id !== req.user.id) {
+        return res.status(403).json({ message: 'Kamu tidak punya akses ke pengadaan ini.' });
+      }
+    }
+
     if ((status === 'Proses' || status === 'Selesai') && tahap.urutan > 1) {
       const prev = await pool.query(
         `SELECT pt.status FROM pengadaan_tahapan pt

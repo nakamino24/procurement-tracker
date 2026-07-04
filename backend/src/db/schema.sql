@@ -71,6 +71,7 @@ CREATE TABLE pengadaan (
     vendor         VARCHAR(255),
     nilai_kontrak  NUMERIC(18,2) DEFAULT 0,
     pic            VARCHAR(150),
+    pic_user_id    INTEGER REFERENCES users(id), -- akun PIC yang bertanggung jawab; dipakai untuk batasi akses staff
     tanggal_mulai  DATE NOT NULL DEFAULT CURRENT_DATE,
     created_by     INTEGER REFERENCES users(id),
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -94,6 +95,7 @@ CREATE INDEX idx_pengadaan_tahapan_pengadaan ON pengadaan_tahapan(pengadaan_id);
 CREATE INDEX idx_pengadaan_tahapan_status ON pengadaan_tahapan(status);
 CREATE INDEX idx_pengadaan_vendor ON pengadaan(vendor);
 CREATE INDEX idx_pengadaan_pic ON pengadaan(pic);
+CREATE INDEX idx_pengadaan_pic_user ON pengadaan(pic_user_id);
 
 -- ============================================================
 -- TRIGGER: setiap ada pengadaan baru, otomatis buatkan baris
