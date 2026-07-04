@@ -7,12 +7,26 @@ import api from '../api/axios';
 export default function Dashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    api.get('/dashboard/summary').then((res) => setData(res.data)).finally(() => setLoading(false));
+    api.get('/dashboard/summary')
+      .then((res) => setData(res.data))
+      .catch((err) => setError(err.response?.data?.message || 'Gagal memuat ringkasan dashboard.'))
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <Layout title="Dashboard"><p className="text-ink-600">Memuat data...</p></Layout>;
+
+  if (error || !data) {
+    return (
+      <Layout title="Dashboard">
+        <div className="bg-red-50 text-red-700 text-sm rounded-xl p-4">
+          {error || 'Data dashboard tidak tersedia.'}
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout title="Dashboard">
