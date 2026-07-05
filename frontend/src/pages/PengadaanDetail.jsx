@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { AlertTriangle, History } from 'lucide-react';
 import Layout from '../components/Layout';
 import api from '../api/axios';
 
@@ -18,6 +19,10 @@ const METODE_PENGADAAN_INFO = {
   'Penunjukan Langsung': 'Wajib isi aspek positif & negatif bila dikerjakan provider lain',
 };
 
+function formatTanggal(dateStr) {
+  return new Date(dateStr).toLocaleString('id-ID');
+}
+
 export default function PengadaanDetail() {
   const { id } = useParams();
   const [data, setData] = useState(null);
@@ -25,10 +30,12 @@ export default function PengadaanDetail() {
   const [savingId, setSavingId] = useState(null);
   const [modal, setModal] = useState(null);
 
-  // Form metode pengadaan (terpisah dari tahapan, ini "atribut" pengadaan)
   const [metode, setMetode] = useState(null);
   const [metodeSaving, setMetodeSaving] = useState(false);
   const [metodeMsg, setMetodeMsg] = useState('');
+
+  const [audit, setAudit] = useState([]);
+  const [showAudit, setShowAudit] = useState(false);
 
   async function load() {
     const res = await api.get(`/pengadaan/${id}`);
@@ -41,6 +48,11 @@ export default function PengadaanDetail() {
       kategori_putusan: res.data.kategori_putusan || '',
       pakai_spk: res.data.pakai_spk,
     });
+  }
+
+  async function loadAudit() {
+    const res = await api.get(`/pengadaan/${id}/audit`);
+    setAudit(res.data);
   }
 
   useEffect(() => { load(); }, [id]);
@@ -57,6 +69,7 @@ export default function PengadaanDetail() {
       await api.put(`/tahapan/${modal.tahapId}`, { status: modal.status, catatan: modal.catatan });
       setModal(null);
       await load();
+      if (showAudit) await loadAudit();
     } catch (err) {
       setError(err.response?.data?.message || 'Gagal update status.');
       setModal(null);
@@ -73,6 +86,7 @@ export default function PengadaanDetail() {
       await api.put(`/pengadaan/${id}/metode`, metode);
       setMetodeMsg('Tersimpan. Tahap terkait sudah otomatis disesuaikan.');
       await load();
+      if (showAudit) await loadAudit();
     } catch (err) {
       setMetodeMsg(err.response?.data?.message || 'Gagal menyimpan.');
     } finally {
@@ -80,19 +94,50 @@ export default function PengadaanDetail() {
     }
   }
 
+  async function toggleAudit() {
+    if (!showAudit) await loadAudit();
+    setShowAudit(!showAudit);
+  }
+
   if (!data || !metode) return <Layout title="Detail Pengadaan"><p className="text-ink-600">Memuat...</p></Layout>;
 
   return (
     <Layout title={data.nama_pengadaan}>
-      <div className="mb-6">
+      <div className="mb-6 flex items-center justify-between">
         <p className="text-ink-600 text-sm mt-1">
           Vendor: {data.vendor || '-'} · PIC: {data.pic_nama || data.pic || '-'} · Nilai: Rp{Number(data.nilai_kontrak).toLocaleString('id-ID')}
         </p>
+        <button
+          onClick={toggleAudit}
+          className="flex items-center gap-1.5 text-sm text-ink-600 hover:text-stamp-600 shrink-0"
+        >
+          <History size={16} /> {showAudit ? 'Sembunyikan' : 'Lihat'} Riwayat Perubahan
+        </button>
       </div>
 
       {error && <div className="bg-red-50 text-red-700 text-sm rounded p-3 mb-4">{error}</div>}
 
-      {/* Card: Metode Pengadaan -- menentukan tahap mana yang muncul */}
+      {showAudit && (
+        <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
+          <h2 className="font-semibold text-ink-800 mb-3">Riwayat Perubahan</h2>
+          {audit.length === 0 ? (
+            <p className="text-sm text-ink-400">Belum ada riwayat.</p>
+          ) : (
+            <ul className="space-y-3 max-h-72 overflow-y-auto pr-1">
+              {audit.map((a) => (
+                <li key={a.id} className="text-sm border-b border-ink-100 pb-2">
+                  <p className="text-ink-800">
+                    <span className="font-medium">{a.user_nama || 'Sistem'}</span> — {a.aksi}
+                  </p>
+                  {a.detail && <p className="text-xs text-ink-500 mt-0.5">{a.detail}</p>}
+                  <p className="text-xs text-ink-400 mt-0.5">{formatTanggal(a.created_at)}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
         <h2 className="font-semibold text-ink-800 mb-1">Metode Pengadaan</h2>
         <p className="text-xs text-ink-400 mb-4">
@@ -172,6 +217,12 @@ export default function PengadaanDetail() {
               <option value="GH + GH">Non-Komite: GH + GH</option>
               <option value="DH + GH">Non-Komite: DH + GH</option>
             </select>
+            {['Komite 1', 'Komite 2', 'Komite 3', 'Komite 4'].includes(metode.kategori_putusan) && (
+              <p className="text-xs text-ink-400 mt-1">
+                Otomatis menambah tahap Background Checking, PEP, Opini Legal, Opini Compliance, Opini SORH
+                {['Komite 1', 'Komite 2'].includes(metode.kategori_putusan) && ' + Uji Kepatuhan'}.
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-2 pt-6">
@@ -196,17 +247,22 @@ export default function PengadaanDetail() {
         </form>
       </div>
 
-      {/* Daftar tahapan */}
       <div className="bg-white rounded-xl shadow-sm divide-y divide-ink-100">
         {data.tahapan.map((t) => (
           <div key={t.id} className="p-4 flex items-center justify-between gap-4">
             <div className="flex-1">
-              <p className="font-medium text-ink-800">{t.urutan}. {t.nama_tahap}</p>
-              {t.tanggal_update && (
-                <p className="text-xs text-ink-400">
-                  Update terakhir: {new Date(t.tanggal_update).toLocaleString('id-ID')}
-                </p>
-              )}
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-ink-800">{t.urutan}. {t.nama_tahap}</p>
+                {t.is_overdue && (
+                  <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">
+                    <AlertTriangle size={11} /> Lewat SLA
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-ink-400">
+                Target: {t.target_hari} hari
+                {t.tanggal_update && ` · Update terakhir: ${formatTanggal(t.tanggal_update)}`}
+              </p>
               {t.catatan && <p className="text-xs text-ink-500 mt-1">Catatan: {t.catatan}</p>}
             </div>
             <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLOR[t.status]}`}>
