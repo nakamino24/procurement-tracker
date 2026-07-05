@@ -12,17 +12,35 @@ const STATUS_COLOR = {
   'Batal': 'bg-red-100 text-red-700',
 };
 
+const METODE_PENGADAAN_INFO = {
+  'Tender Umum': 'Nilai anggaran > Rp5 Miliar',
+  'Tender Terbatas': 'Nilai anggaran Rp500 Juta – Rp5 Miliar',
+  'Penunjukan Langsung': 'Wajib isi aspek positif & negatif bila dikerjakan provider lain',
+};
+
 export default function PengadaanDetail() {
   const { id } = useParams();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [savingId, setSavingId] = useState(null);
-  // Modal ganti status: { tahapId, status, catatan } atau null kalau tertutup
   const [modal, setModal] = useState(null);
+
+  // Form metode pengadaan (terpisah dari tahapan, ini "atribut" pengadaan)
+  const [metode, setMetode] = useState(null);
+  const [metodeSaving, setMetodeSaving] = useState(false);
+  const [metodeMsg, setMetodeMsg] = useState('');
 
   async function load() {
     const res = await api.get(`/pengadaan/${id}`);
     setData(res.data);
+    setMetode({
+      metode_pengadaan: res.data.metode_pengadaan || '',
+      aspek_positif_pl: res.data.aspek_positif_pl || '',
+      aspek_negatif_pl: res.data.aspek_negatif_pl || '',
+      metode_penilaian: res.data.metode_penilaian || '',
+      kategori_putusan: res.data.kategori_putusan || '',
+      pakai_spk: res.data.pakai_spk,
+    });
   }
 
   useEffect(() => { load(); }, [id]);
@@ -47,7 +65,22 @@ export default function PengadaanDetail() {
     }
   }
 
-  if (!data) return <Layout title="Detail Pengadaan"><p className="text-ink-600">Memuat...</p></Layout>;
+  async function saveMetode(e) {
+    e.preventDefault();
+    setMetodeMsg('');
+    setMetodeSaving(true);
+    try {
+      await api.put(`/pengadaan/${id}/metode`, metode);
+      setMetodeMsg('Tersimpan. Tahap terkait sudah otomatis disesuaikan.');
+      await load();
+    } catch (err) {
+      setMetodeMsg(err.response?.data?.message || 'Gagal menyimpan.');
+    } finally {
+      setMetodeSaving(false);
+    }
+  }
+
+  if (!data || !metode) return <Layout title="Detail Pengadaan"><p className="text-ink-600">Memuat...</p></Layout>;
 
   return (
     <Layout title={data.nama_pengadaan}>
@@ -59,6 +92,111 @@ export default function PengadaanDetail() {
 
       {error && <div className="bg-red-50 text-red-700 text-sm rounded p-3 mb-4">{error}</div>}
 
+      {/* Card: Metode Pengadaan -- menentukan tahap mana yang muncul */}
+      <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
+        <h2 className="font-semibold text-ink-800 mb-1">Metode Pengadaan</h2>
+        <p className="text-xs text-ink-400 mb-4">
+          Diisi di tahap "Usulan User" & "Aanwijzing". Mengubah ini otomatis menambah/menghapus tahap yang relevan.
+        </p>
+        {metodeMsg && (
+          <div className={`text-sm rounded p-2 mb-3 ${metodeMsg.startsWith('Tersimpan') ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+            {metodeMsg}
+          </div>
+        )}
+        <form onSubmit={saveMetode} className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm text-ink-600">Metode Pengadaan</label>
+            <select
+              value={metode.metode_pengadaan}
+              onChange={(e) => setMetode({ ...metode, metode_pengadaan: e.target.value })}
+              className="w-full mt-1 border border-ink-100 rounded px-3 py-2 text-sm"
+            >
+              <option value="">Belum ditentukan</option>
+              <option value="Tender Umum">Tender Umum</option>
+              <option value="Tender Terbatas">Tender Terbatas</option>
+              <option value="Penunjukan Langsung">Penunjukan Langsung</option>
+            </select>
+            {metode.metode_pengadaan && (
+              <p className="text-xs text-ink-400 mt-1">{METODE_PENGADAAN_INFO[metode.metode_pengadaan]}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="text-sm text-ink-600">Metode Penilaian (diisi saat Aanwijzing)</label>
+            <select
+              value={metode.metode_penilaian}
+              onChange={(e) => setMetode({ ...metode, metode_penilaian: e.target.value })}
+              className="w-full mt-1 border border-ink-100 rounded px-3 py-2 text-sm"
+            >
+              <option value="">Belum ditentukan</option>
+              <option value="Sistem Nilai">Sistem Nilai (70% Teknis + 30% Finansial)</option>
+              <option value="Evaluasi Biaya Terendah">Evaluasi Biaya Terendah (Auction)</option>
+            </select>
+          </div>
+
+          {metode.metode_pengadaan === 'Penunjukan Langsung' && (
+            <>
+              <div>
+                <label className="text-sm text-ink-600">Aspek Positif (bila dikerjakan provider lain)</label>
+                <textarea
+                  rows={2}
+                  value={metode.aspek_positif_pl}
+                  onChange={(e) => setMetode({ ...metode, aspek_positif_pl: e.target.value })}
+                  className="w-full mt-1 border border-ink-100 rounded px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-ink-600">Aspek Negatif (bila dikerjakan provider lain)</label>
+                <textarea
+                  rows={2}
+                  value={metode.aspek_negatif_pl}
+                  onChange={(e) => setMetode({ ...metode, aspek_negatif_pl: e.target.value })}
+                  className="w-full mt-1 border border-ink-100 rounded px-3 py-2 text-sm"
+                />
+              </div>
+            </>
+          )}
+
+          <div>
+            <label className="text-sm text-ink-600">Kategori Putusan (diisi saat Putusan Hasil)</label>
+            <select
+              value={metode.kategori_putusan}
+              onChange={(e) => setMetode({ ...metode, kategori_putusan: e.target.value })}
+              className="w-full mt-1 border border-ink-100 rounded px-3 py-2 text-sm"
+            >
+              <option value="">Belum ditentukan</option>
+              <option value="Komite 1">Komite 1</option>
+              <option value="Komite 2">Komite 2</option>
+              <option value="Komite 3">Komite 3</option>
+              <option value="Komite 4">Komite 4</option>
+              <option value="GH + GH">Non-Komite: GH + GH</option>
+              <option value="DH + GH">Non-Komite: DH + GH</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2 pt-6">
+            <input
+              type="checkbox"
+              id="pakai_spk"
+              checked={metode.pakai_spk}
+              onChange={(e) => setMetode({ ...metode, pakai_spk: e.target.checked })}
+              className="w-4 h-4"
+            />
+            <label htmlFor="pakai_spk" className="text-sm text-ink-600">
+              Pakai Surat Perintah Kerja (SPK) sebelum Penerbitan Perjanjian
+            </label>
+          </div>
+
+          <button
+            type="submit" disabled={metodeSaving}
+            className="sm:col-span-2 bg-ink-900 text-white rounded py-2 text-sm hover:bg-ink-800 disabled:opacity-50"
+          >
+            {metodeSaving ? 'Menyimpan...' : 'Simpan Metode'}
+          </button>
+        </form>
+      </div>
+
+      {/* Daftar tahapan */}
       <div className="bg-white rounded-xl shadow-sm divide-y divide-ink-100">
         {data.tahapan.map((t) => (
           <div key={t.id} className="p-4 flex items-center justify-between gap-4">
@@ -84,9 +222,11 @@ export default function PengadaanDetail() {
             </select>
           </div>
         ))}
+        {data.tahapan.length === 0 && (
+          <div className="p-6 text-center text-sm text-ink-400">Belum ada tahap.</div>
+        )}
       </div>
 
-      {/* Modal ganti status, pengganti window.prompt() yang tidak didukung di semua browser/webview */}
       {modal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
@@ -104,10 +244,7 @@ export default function PengadaanDetail() {
               placeholder="Tulis catatan kalau perlu..."
             />
             <div className="flex justify-end gap-2 mt-4">
-              <button
-                onClick={() => setModal(null)}
-                className="text-sm px-4 py-2 rounded text-ink-600 hover:bg-ink-50"
-              >
+              <button onClick={() => setModal(null)} className="text-sm px-4 py-2 rounded text-ink-600 hover:bg-ink-50">
                 Batal
               </button>
               <button
