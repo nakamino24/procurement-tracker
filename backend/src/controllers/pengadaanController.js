@@ -161,4 +161,87 @@ async function remove(req, res) {
   }
 }
 
-module.exports = { getAll, getById, create, update, remove };
+// Helper: tambahkan 1 tahap kondisional (kalau belum ada) berdasarkan kode-nya
+async function ensureStage(pengadaanId, kode) {
+  await pool.query(
+    `INSERT INTO pengadaan_tahapan (pengadaan_id, tahapan_master_id, status)
+     SELECT $1, tm.id, 'Belum Mulai' FROM tahapan_master tm WHERE tm.kode = $2
+     ON CONFLICT (pengadaan_id, tahapan_master_id) DO NOTHING`,
+    [pengadaanId, kode]
+  );
+}
+
+// Helper: hapus 1 tahap kondisional, TAPI cuma kalau statusnya masih
+// "Belum Mulai" -- supaya nggak menghapus progress yang sudah dikerjakan
+// kalau ternyata PIC ganti-ganti pilihan metode.
+async function removeStageIfUntouched(pengadaanId, kode) {
+  await pool.query(
+    `DELETE FROM pengadaan_tahapan pt
+     USING tahapan_master tm
+     WHERE pt.tahapan_master_id = tm.id AND tm.kode = $2
+       AND pt.pengadaan_id = $1 AND pt.status = 'Belum Mulai'`,
+    [pengadaanId, kode]
+  );
+}
+
+// PUT /api/pengadaan/:id/metode
+// Menyimpan metode pengadaan/penilaian/kategori putusan/toggle SPK, LALU
+// otomatis menyesuaikan tahap mana yang relevan buat pengadaan ini:
+// - Tender Umum/Terbatas -> tambah tahap "Surat Pengumuman Pemenang"
+// - Penunjukan Langsung  -> tahap itu dihapus (kalau belum dikerjakan)
+// - Sistem Nilai         -> tambah "Penggabungan Nilai", hapus "Auction"
+// - Evaluasi Biaya Terendah -> kebalikannya
+// - pakai_spk toggle     -> tambah/hapus tahap "Surat Perintah Kerja"
+async function updateMetode(req, res) {
+  const { id } = req.params;
+  const { metode_pengadaan, aspek_positif_pl, aspek_negatif_pl, metode_penilaian, kategori_putusan, pakai_spk } = req.body;
+
+  try {
+    const check = await pool.query('SELECT pic_user_id FROM pengadaan WHERE id = $1', [id]);
+    if (!check.rows[0]) return res.status(404).json({ message: 'Pengadaan tidak ditemukan.' });
+    if (req.user.role === 'staff' && check.rows[0].pic_user_id !== req.user.id) {
+      return res.status(403).json({ message: 'Kamu tidak punya akses untuk mengubah pengadaan ini.' });
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE pengadaan SET
+        metode_pengadaan = COALESCE($1, metode_pengadaan),
+        aspek_positif_pl = COALESCE($2, aspek_positif_pl),
+        aspek_negatif_pl = COALESCE($3, aspek_negatif_pl),
+        metode_penilaian = COALESCE($4, metode_penilaian),
+        kategori_putusan = COALESCE($5, kategori_putusan),
+        pakai_spk = COALESCE($6, pakai_spk),
+        updated_at = now()
+       WHERE id = $7 RETURNING *`,
+      [metode_pengadaan, aspek_positif_pl, aspek_negatif_pl, metode_penilaian, kategori_putusan, pakai_spk, id]
+    );
+    const updated = rows[0];
+
+    if (updated.metode_pengadaan === 'Tender Umum' || updated.metode_pengadaan === 'Tender Terbatas') {
+      await ensureStage(id, 'pengumuman_pemenang');
+    } else if (updated.metode_pengadaan === 'Penunjukan Langsung') {
+      await removeStageIfUntouched(id, 'pengumuman_pemenang');
+    }
+
+    if (updated.metode_penilaian === 'Sistem Nilai') {
+      await ensureStage(id, 'penggabungan_nilai');
+      await removeStageIfUntouched(id, 'auction');
+    } else if (updated.metode_penilaian === 'Evaluasi Biaya Terendah') {
+      await ensureStage(id, 'auction');
+      await removeStageIfUntouched(id, 'penggabungan_nilai');
+    }
+
+    if (updated.pakai_spk) {
+      await ensureStage(id, 'surat_perintah_kerja');
+    } else {
+      await removeStageIfUntouched(id, 'surat_perintah_kerja');
+    }
+
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Gagal update metode pengadaan.' });
+  }
+}
+
+module.exports = { getAll, getById, create, update, remove, updateMetode };

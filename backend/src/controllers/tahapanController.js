@@ -3,12 +3,16 @@ const pool = require('../config/db');
 const STATUS_VALID = ['Belum Mulai', 'Proses', 'Selesai', 'Tertunda', 'Batal'];
 
 // PUT /api/tahapan/:id  body: { status, catatan }
-// Aturan bisnis "harus berurutan": tahap ini hanya boleh diubah jadi
-// 'Proses' atau 'Selesai' kalau tahap SEBELUMNYA (urutan - 1) sudah
-// berstatus 'Selesai'. Status 'Tertunda' boleh kapan saja (menandakan
-// tahap ini macet). Tahap pertama (urutan = 1) selalu boleh diubah.
+// CATATAN: tahapan BOLEH dikerjakan paralel / tidak berurutan. Di lapangan,
+// banyak tahap yang formalnya berurutan tapi praktiknya jalan bersamaan
+// (misal Kelengkapan Dokumen sudah disiapkan walau Konfirmasi Anggaran
+// masih proses). Jadi di sini TIDAK ADA pengecekan "tahap sebelumnya harus
+// Selesai dulu" -- staff/admin bebas update status tahap manapun kapan saja.
+// Urutan (`urutan` di tahapan_master) tetap dipakai untuk TAMPILAN dan
+// perhitungan dashboard (stuck per tahap, rata-rata durasi), bukan untuk
+// membatasi input.
 async function updateStatus(req, res) {
-  const { id } = req.params; // ini adalah id di tabel pengadaan_tahapan
+  const { id } = req.params; // id di tabel pengadaan_tahapan
   const { status, catatan } = req.body;
 
   if (!STATUS_VALID.includes(status)) {
@@ -30,20 +34,6 @@ async function updateStatus(req, res) {
       const owner = await pool.query('SELECT pic_user_id FROM pengadaan WHERE id = $1', [tahap.pengadaan_id]);
       if (owner.rows[0]?.pic_user_id !== req.user.id) {
         return res.status(403).json({ message: 'Kamu tidak punya akses ke pengadaan ini.' });
-      }
-    }
-
-    if ((status === 'Proses' || status === 'Selesai') && tahap.urutan > 1) {
-      const prev = await pool.query(
-        `SELECT pt.status FROM pengadaan_tahapan pt
-         JOIN tahapan_master tm ON tm.id = pt.tahapan_master_id
-         WHERE pt.pengadaan_id = $1 AND tm.urutan = $2`,
-        [tahap.pengadaan_id, tahap.urutan - 1]
-      );
-      if (prev.rows[0] && prev.rows[0].status !== 'Selesai') {
-        return res.status(400).json({
-          message: `Tidak bisa lanjut: tahap sebelumnya belum "Selesai".`,
-        });
       }
     }
 
