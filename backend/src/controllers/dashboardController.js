@@ -7,7 +7,7 @@ const pool = require('../config/db');
 //    ke tahap ini (proxy sederhana durasi pengerjaan tiap tahap)
 // 3. progress_items: progress % tiap pengadaan (dipakai buat progress bar)
 // 4. status_distribution: jumlah tahap per status (untuk donut chart)
-// 5. trend_bulanan: jumlah pengadaan dibuat vs selesai per bulan, 6 bulan terakhir (untuk chart)
+// 5. trend_bulanan: jumlah pengadaan dibuat vs selesai per bulan, 6 bulan terakhir (untuk line/bar chart)
 // 6. activity_feed: histori update status tahap terbaru (untuk feed aktivitas)
 async function summary(req, res) {
   const isStaff = req.user.role === 'staff';
@@ -30,7 +30,7 @@ async function summary(req, res) {
       JOIN pengadaan p ON p.id = pt.pengadaan_id
       LEFT JOIN pengadaan_tahapan prev
         ON prev.pengadaan_id = pt.pengadaan_id
-        AND prev.tahapan_master_id = (
+        AND prev.tahapan_master_id IN (
           SELECT id FROM tahapan_master WHERE urutan = tm.urutan - 1
         )
       WHERE pt.status = 'Selesai' AND prev.status = 'Selesai' ${isStaff ? 'AND p.pic_user_id = $1' : ''}

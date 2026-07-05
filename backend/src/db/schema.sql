@@ -68,21 +68,31 @@ CREATE TABLE tahapan_master (
 );
 
 -- Data awal sesuai alur riil pengadaan BRI
+-- wajib_untuk tambahan:
+--   'komite'      -> cuma kalau kategori_putusan salah satu dari Komite 1-4
+--   'komite_1_2'  -> cuma kalau kategori_putusan = Komite 1 ATAU Komite 2
 INSERT INTO tahapan_master (kode, nama_tahap, urutan, wajib_untuk) VALUES
     ('usulan_user', 'Usulan User', 1, 'semua'),
     ('kelengkapan_dokumen', 'Kelengkapan Dokumen', 2, 'semua'),
     ('permintaan_hps', 'Permintaan HPS', 3, 'semua'),
-    ('izin_pelaksanaan', 'Izin Pelaksanaan Pengadaan', 4, 'semua'),
-    ('aanwijzing', 'Aanwijzing', 5, 'semua'),
-    ('pemasukan_sampul', 'Pemasukan Sampul Penawaran & Pembukaan Proposal Administrasi dan Teknis', 6, 'semua'),
-    ('penilaian_teknis', 'Penilaian Teknis', 7, 'semua'),
-    ('penggabungan_nilai', 'Penggabungan Nilai', 8, 'penilaian_sistem_nilai'),
-    ('auction', 'Auction', 8, 'penilaian_auction'),
-    ('klarifikasi_negosiasi', 'Klarifikasi dan Negosiasi', 9, 'semua'),
-    ('putusan_hasil', 'Putusan Hasil', 10, 'semua'),
-    ('pengumuman_pemenang', 'Surat Pengumuman Pemenang', 11, 'tender'),
-    ('surat_perintah_kerja', 'Surat Perintah Kerja', 12, 'opsional'),
-    ('penerbitan_perjanjian', 'Penerbitan Perjanjian', 13, 'semua');
+    ('penyampaian_hps', 'Penyampaian HPS', 4, 'semua'),
+    ('izin_pelaksanaan', 'Izin Pelaksanaan Pengadaan', 5, 'semua'),
+    ('aanwijzing', 'Aanwijzing', 6, 'semua'),
+    ('pemasukan_sampul', 'Pemasukan Sampul Penawaran & Pembukaan Proposal Administrasi dan Teknis', 7, 'semua'),
+    ('penilaian_teknis', 'Penilaian Teknis', 8, 'semua'),
+    ('penggabungan_nilai', 'Penggabungan Nilai', 9, 'penilaian_sistem_nilai'),
+    ('auction', 'Auction', 9, 'penilaian_auction'),
+    ('klarifikasi_negosiasi', 'Klarifikasi dan Negosiasi', 10, 'semua'),
+    ('background_checking', 'Background Checking', 11, 'komite'),
+    ('pep', 'Politically Exposed Person (PEP)', 12, 'komite'),
+    ('opini_legal', 'Opini Legal', 13, 'komite'),
+    ('opini_compliance', 'Opini Compliance', 14, 'komite'),
+    ('opini_sorh', 'Opini SORH', 15, 'komite'),
+    ('uji_kepatuhan', 'Uji Kepatuhan', 16, 'komite_1_2'),
+    ('putusan_hasil', 'Putusan Hasil', 17, 'semua'),
+    ('pengumuman_pemenang', 'Surat Pengumuman Pemenang', 18, 'tender'),
+    ('surat_perintah_kerja', 'Surat Perintah Kerja', 19, 'opsional'),
+    ('penerbitan_perjanjian', 'Penerbitan Perjanjian', 20, 'opsional');
 
 -- 3. PENGADAAN (data induk)
 CREATE TABLE pengadaan (

@@ -237,6 +237,25 @@ async function updateMetode(req, res) {
       await removeStageIfUntouched(id, 'surat_perintah_kerja');
     }
 
+    // Due-diligence khusus jalur Komite (Background Checking, PEP, Opini
+    // Legal, Opini Compliance, Opini SORH). Non-komite (GH+GH / DH+GH)
+    // tidak butuh ini.
+    const KOMITE_CHECKS = ['background_checking', 'pep', 'opini_legal', 'opini_compliance', 'opini_sorh'];
+    const isKomite = ['Komite 1', 'Komite 2', 'Komite 3', 'Komite 4'].includes(updated.kategori_putusan);
+    if (isKomite) {
+      for (const kode of KOMITE_CHECKS) await ensureStage(id, kode);
+    } else if (updated.kategori_putusan) {
+      // kategori_putusan sudah diisi TAPI bukan komite (berarti GH+GH/DH+GH)
+      for (const kode of KOMITE_CHECKS) await removeStageIfUntouched(id, kode);
+    }
+
+    // Uji Kepatuhan cuma untuk Komite 1 & 2 secara spesifik
+    if (['Komite 1', 'Komite 2'].includes(updated.kategori_putusan)) {
+      await ensureStage(id, 'uji_kepatuhan');
+    } else if (updated.kategori_putusan) {
+      await removeStageIfUntouched(id, 'uji_kepatuhan');
+    }
+
     res.json(updated);
   } catch (err) {
     console.error(err);
