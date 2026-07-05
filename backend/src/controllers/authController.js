@@ -2,6 +2,13 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
 
+// Password policy: minimal 8 karakter, wajib ada huruf DAN angka.
+// Dipakai di register (bikin akun) dan ganti password.
+function isPasswordValid(pw) {
+  return typeof pw === 'string' && pw.length >= 8 && /[a-zA-Z]/.test(pw) && /[0-9]/.test(pw);
+}
+const PASSWORD_HINT = 'Password minimal 8 karakter dan harus mengandung huruf serta angka.';
+
 // POST /api/auth/login
 async function login(req, res) {
   const { email, password } = req.body;
@@ -33,6 +40,9 @@ async function register(req, res) {
   const { nama, email, password, role } = req.body;
   if (!nama || !email || !password) {
     return res.status(400).json({ message: 'Nama, email, password wajib diisi.' });
+  }
+  if (!isPasswordValid(password)) {
+    return res.status(400).json({ message: PASSWORD_HINT });
   }
   try {
     const hash = await bcrypt.hash(password, 10);
@@ -72,6 +82,9 @@ async function changePassword(req, res) {
   }
   if (newPassword.length < 6) {
     return res.status(400).json({ message: 'Password baru minimal 6 karakter.' });
+  }
+  if (!isPasswordValid(newPassword)) {
+    return res.status(400).json({ message: PASSWORD_HINT });
   }
   try {
     const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id]);

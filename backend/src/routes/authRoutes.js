@@ -2,8 +2,9 @@ const express = require('express');
 const router = express.Router();
 const { login, register, listUsers, changePassword } = require('../controllers/authController');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { loginLimiter } = require('../middleware/rateLimiter');
 
-router.post('/login', login);
+router.post('/login', loginLimiter, login);
 // Hanya admin yang sudah login yang boleh mendaftarkan user baru
 router.post('/register', requireAuth, requireRole('admin'), register);
 // Daftar user, dipakai admin untuk dropdown assign PIC & halaman kelola akun

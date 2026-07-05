@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { logAudit } = require('../utils/auditLog');
 
 // GET /api/pengadaan?status=Proses&vendor=abc&pic=budi&search=laptop
 // Filter bersifat opsional & bisa digabung. `search` mencari di nama_pengadaan.
@@ -70,8 +71,16 @@ async function getById(req, res) {
     }
 
     const tahapan = await pool.query(
-      `SELECT pt.id, pt.status, pt.tanggal_update, pt.catatan,
-              tm.id AS tahapan_master_id, tm.nama_tahap, tm.urutan
+      `SELECT pt.id, pt.status, pt.tanggal_update, pt.catatan, pt.tanggal_mulai_tahap,
+              tm.id AS tahapan_master_id, tm.nama_tahap, tm.urutan, tm.target_hari,
+              CASE
+                WHEN pt.tanggal_mulai_tahap IS NULL THEN false
+                WHEN pt.status = 'Selesai' THEN
+                  EXTRACT(EPOCH FROM (pt.tanggal_update - pt.tanggal_mulai_tahap)) / 86400 > tm.target_hari
+                WHEN pt.status IN ('Proses', 'Tertunda') THEN
+                  EXTRACT(EPOCH FROM (now() - pt.tanggal_mulai_tahap)) / 86400 > tm.target_hari
+                ELSE false
+              END AS is_overdue
        FROM pengadaan_tahapan pt
        JOIN tahapan_master tm ON tm.id = pt.tahapan_master_id
        WHERE pt.pengadaan_id = $1
@@ -102,6 +111,7 @@ async function create(req, res) {
        VALUES ($1, $2, $3, $4, $5, COALESCE($6, CURRENT_DATE), $7) RETURNING *`,
       [nama_pengadaan, vendor, nilai_kontrak || 0, picUser.rows[0]?.nama || null, assignedPicId, tanggal_mulai, req.user.id]
     );
+    await logAudit(rows[0].id, req.user.id, 'Membuat pengadaan', `Nama: ${nama_pengadaan}, PIC: ${picUser.rows[0]?.nama || '-'}`);
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error(err);
@@ -141,6 +151,11 @@ async function update(req, res) {
       [nama_pengadaan, vendor, nilai_kontrak, pic_user_id, picNama, tanggal_mulai, id]
     );
     if (!rows[0]) return res.status(404).json({ message: 'Pengadaan tidak ditemukan.' });
+    const perubahan = Object.entries({ nama_pengadaan, vendor, nilai_kontrak, pic_user_id, tanggal_mulai })
+      .filter(([, v]) => v !== undefined && v !== null)
+      .map(([k]) => k)
+      .join(', ');
+    await logAudit(id, req.user.id, 'Mengubah data pengadaan', perubahan ? `Field: ${perubahan}` : null);
     res.json(rows[0]);
   } catch (err) {
     console.error(err);
@@ -256,6 +271,11 @@ async function updateMetode(req, res) {
       await removeStageIfUntouched(id, 'uji_kepatuhan');
     }
 
+    await logAudit(
+      id, req.user.id, 'Mengubah metode pengadaan',
+      `Metode: ${updated.metode_pengadaan || '-'}, Penilaian: ${updated.metode_penilaian || '-'}, Kategori Putusan: ${updated.kategori_putusan || '-'}, Pakai SPK: ${updated.pakai_spk}`
+    );
+
     res.json(updated);
   } catch (err) {
     console.error(err);
@@ -263,4 +283,28 @@ async function updateMetode(req, res) {
   }
 }
 
-module.exports = { getAll, getById, create, update, remove, updateMetode };
+// GET /api/pengadaan/:id/audit -> histori lengkap perubahan pengadaan ini
+async function getAudit(req, res) {
+  const { id } = req.params;
+  try {
+    const check = await pool.query('SELECT pic_user_id FROM pengadaan WHERE id = $1', [id]);
+    if (!check.rows[0]) return res.status(404).json({ message: 'Pengadaan tidak ditemukan.' });
+    if (req.user.role === 'staff' && check.rows[0].pic_user_id !== req.user.id) {
+      return res.status(403).json({ message: 'Kamu tidak punya akses ke pengadaan ini.' });
+    }
+    const { rows } = await pool.query(
+      `SELECT a.id, a.aksi, a.detail, a.created_at, u.nama AS user_nama
+       FROM audit_log a
+       LEFT JOIN users u ON u.id = a.user_id
+       WHERE a.pengadaan_id = $1
+       ORDER BY a.created_at DESC`,
+      [id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Gagal mengambil riwayat perubahan.' });
+  }
+}
+
+module.exports = { getAll, getById, create, update, remove, updateMetode, getAudit };

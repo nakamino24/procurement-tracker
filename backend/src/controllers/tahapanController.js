@@ -1,16 +1,12 @@
 const pool = require('../config/db');
+const { logAudit } = require('../utils/auditLog');
 
 const STATUS_VALID = ['Belum Mulai', 'Proses', 'Selesai', 'Tertunda', 'Batal'];
 
 // PUT /api/tahapan/:id  body: { status, catatan }
-// CATATAN: tahapan BOLEH dikerjakan paralel / tidak berurutan. Di lapangan,
-// banyak tahap yang formalnya berurutan tapi praktiknya jalan bersamaan
-// (misal Kelengkapan Dokumen sudah disiapkan walau Konfirmasi Anggaran
-// masih proses). Jadi di sini TIDAK ADA pengecekan "tahap sebelumnya harus
-// Selesai dulu" -- staff/admin bebas update status tahap manapun kapan saja.
-// Urutan (`urutan` di tahapan_master) tetap dipakai untuk TAMPILAN dan
-// perhitungan dashboard (stuck per tahap, rata-rata durasi), bukan untuk
-// membatasi input.
+// CATATAN: tahapan BOLEH dikerjakan paralel / tidak berurutan (lihat
+// riwayat perubahan sebelumnya) -- tidak ada pengecekan "tahap sebelumnya
+// harus Selesai dulu".
 async function updateStatus(req, res) {
   const { id } = req.params; // id di tabel pengadaan_tahapan
   const { status, catatan } = req.body;
@@ -37,12 +33,26 @@ async function updateStatus(req, res) {
       }
     }
 
+    // tanggal_mulai_tahap diisi SEKALI SAJA -- pertama kali status keluar
+    // dari "Belum Mulai". Dipakai untuk hitung SLA (target_hari vs realisasi).
     const { rows } = await pool.query(
       `UPDATE pengadaan_tahapan
-       SET status = $1, catatan = COALESCE($2, catatan), tanggal_update = now(), updated_by = $3
+       SET status = $1,
+           catatan = COALESCE($2, catatan),
+           tanggal_update = now(),
+           updated_by = $3,
+           tanggal_mulai_tahap = COALESCE(tanggal_mulai_tahap, CASE WHEN $1 != 'Belum Mulai' THEN now() ELSE NULL END)
        WHERE id = $4 RETURNING *`,
       [status, catatan, req.user.id, id]
     );
+
+    await logAudit(
+      tahap.pengadaan_id,
+      req.user.id,
+      `Update tahap "${tahap.nama_tahap}"`,
+      `Status jadi "${status}"${catatan ? ` — Catatan: ${catatan}` : ''}`
+    );
+
     res.json(rows[0]);
   } catch (err) {
     console.error(err);
