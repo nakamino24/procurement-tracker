@@ -5,7 +5,7 @@ import { UserPlus } from 'lucide-react';
 
 export default function ManageUsers() {
   const [users, setUsers] = useState([]);
-  const [form, setForm] = useState({ nama: '', email: '', password: '', role: 'staff' });
+  const [form, setForm] = useState({ nama: '', email: '', password: '', role: 'staff', tim: '' });
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -26,7 +26,7 @@ export default function ManageUsers() {
     try {
       await api.post('/auth/register', form);
       setMessage(`Akun ${form.nama} berhasil dibuat.`);
-      setForm({ nama: '', email: '', password: '', role: 'staff' });
+      setForm({ nama: '', email: '', password: '', role: 'staff', tim: '' });
       load();
     } catch (err) {
       setError(err.response?.data?.message || 'Gagal membuat akun.');
@@ -57,6 +57,7 @@ export default function ManageUsers() {
               <label className="text-sm text-ink-600">Password Awal</label>
               <input type="password" name="password" required value={form.password} onChange={handleChange}
                 className="w-full mt-1 border border-ink-100 rounded px-3 py-2 text-sm" />
+              <p className="text-xs text-ink-400 mt-1">Minimal 8 karakter, kombinasi huruf dan angka.</p>
             </div>
             <div>
               <label className="text-sm text-ink-600">Role</label>
@@ -64,6 +65,20 @@ export default function ManageUsers() {
                 className="w-full mt-1 border border-ink-100 rounded px-3 py-2 text-sm">
                 <option value="staff">Staff / PIC</option>
                 <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm text-ink-600">Tim (buat penomoran dokumen)</label>
+              <select name="tim" value={form.tim} onChange={handleChange}
+                className="w-full mt-1 border border-ink-100 rounded px-3 py-2 text-sm">
+                <option value="">Pilih tim...</option>
+                <option value="PTT">PTT</option>
+                <option value="PTG">PTG</option>
+                <option value="PTS">PTS</option>
+                <option value="IPT">IPT</option>
+                <option value="RENT">RENT</option>
+                <option value="BCR">BCR</option>
+                <option value="HOF">HOF</option>
               </select>
             </div>
             <button type="submit" className="w-full bg-ink-900 text-white rounded py-2 text-sm hover:bg-ink-800">
@@ -79,6 +94,7 @@ export default function ManageUsers() {
                 <th className="px-4 py-2">Nama</th>
                 <th className="px-4 py-2">Email</th>
                 <th className="px-4 py-2">Role</th>
+                <th className="px-4 py-2">Tim</th>
               </tr>
             </thead>
             <tbody>
@@ -91,6 +107,7 @@ export default function ManageUsers() {
                       {u.role}
                     </span>
                   </td>
+                  <td className="px-4 py-3 text-ink-600">{u.tim || '-'}</td>
                 </tr>
               ))}
             </tbody>

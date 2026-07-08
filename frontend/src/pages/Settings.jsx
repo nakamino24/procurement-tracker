@@ -49,6 +49,7 @@ export default function Settings() {
               <input type="password" required value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
                 className="w-full mt-1 border border-ink-100 rounded px-3 py-2 text-sm" />
             </div>
+            <p className="text-xs text-ink-400 mt-1">Minimal 8 karakter, kombinasi huruf dan angka.</p>
             <div>
               <label className="text-sm text-ink-600">Konfirmasi Password Baru</label>
               <input type="password" required value={confirm} onChange={(e) => setConfirm(e.target.value)}

@@ -37,6 +37,11 @@ export default function PengadaanDetail() {
   const [audit, setAudit] = useState([]);
   const [showAudit, setShowAudit] = useState(false);
 
+  const [dokumen, setDokumen] = useState([]);
+  const [uploadForm, setUploadForm] = useState({ file: null, kode_kerahasiaan: 'B' });
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState('');
+
   async function load() {
     const res = await api.get(`/pengadaan/${id}`);
     setData(res.data);
@@ -55,7 +60,47 @@ export default function PengadaanDetail() {
     setAudit(res.data);
   }
 
-  useEffect(() => { load(); }, [id]);
+  async function loadDokumen() {
+    const res = await api.get(`/pengadaan/${id}/dokumen`);
+    setDokumen(res.data);
+  }
+
+  useEffect(() => { load(); loadDokumen(); }, [id]);
+
+  async function handleUpload(e) {
+    e.preventDefault();
+    if (!uploadForm.file) return setUploadMsg('Pilih file dulu.');
+    setUploading(true);
+    setUploadMsg('');
+    try {
+      const fd = new FormData();
+      fd.append('file', uploadForm.file);
+      fd.append('kode_kerahasiaan', uploadForm.kode_kerahasiaan);
+      const { data } = await api.post(`/pengadaan/${id}/dokumen`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setUploadMsg(`Berhasil! Nomor dokumen: ${data.nomor_dokumen}`);
+      setUploadForm({ file: null, kode_kerahasiaan: 'B' });
+      document.getElementById('file-input').value = '';
+      await loadDokumen();
+    } catch (err) {
+      setUploadMsg(err.response?.data?.message || 'Gagal upload dokumen.');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleDownload(dok) {
+    const token = localStorage.getItem('token');
+    const base = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+    const res = await fetch(`${base}/dokumen/${dok.id}/download`, { headers: { Authorization: `Bearer ${token}` } });
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = dok.nama_file_asli;
+    a.click();
+  }
 
   function openModal(tahap, newStatus) {
     setModal({ tahapId: tahap.id, status: newStatus, catatan: tahap.catatan || '' });
@@ -137,6 +182,70 @@ export default function PengadaanDetail() {
           )}
         </div>
       )}
+
+      <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
+        <h2 className="font-semibold text-ink-800 mb-1">Dokumen</h2>
+        <p className="text-xs text-ink-400 mb-4">
+          Upload file, nomor dokumen & tanggal otomatis dibuatkan sistem.
+        </p>
+        {uploadMsg && (
+          <div className={`text-sm rounded p-2 mb-3 ${uploadMsg.startsWith('Berhasil') ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+            {uploadMsg}
+          </div>
+        )}
+        <form onSubmit={handleUpload} className="flex flex-wrap items-end gap-3 mb-5">
+          <div>
+            <label className="text-sm text-ink-600 block mb-1">File</label>
+            <input
+              id="file-input" type="file"
+              onChange={(e) => setUploadForm({ ...uploadForm, file: e.target.files[0] })}
+              className="text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-sm text-ink-600 block mb-1">Kode Kerahasiaan</label>
+            <select
+              value={uploadForm.kode_kerahasiaan}
+              onChange={(e) => setUploadForm({ ...uploadForm, kode_kerahasiaan: e.target.value })}
+              className="border border-ink-100 rounded px-3 py-2 text-sm"
+            >
+              <option value="B">B — Biasa</option>
+              <option value="R">R — Rahasia</option>
+              <option value="SR">SR — Sangat Rahasia</option>
+            </select>
+          </div>
+          <button
+            type="submit" disabled={uploading}
+            className="bg-ink-900 text-white rounded px-5 py-2 text-sm hover:bg-ink-800 disabled:opacity-50"
+          >
+            {uploading ? 'Mengupload...' : 'Upload'}
+          </button>
+        </form>
+
+        {dokumen.length === 0 ? (
+          <p className="text-sm text-ink-400">Belum ada dokumen.</p>
+        ) : (
+          <ul className="divide-y divide-ink-100">
+            {dokumen.map((d) => (
+              <li key={d.id} className="py-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-ink-800 truncate">{d.nama_file_asli}</p>
+                  <p className="text-xs text-stamp-600 font-mono">{d.nomor_dokumen}</p>
+                  <p className="text-xs text-ink-400">
+                    {new Date(d.tanggal_dokumen).toLocaleDateString('id-ID')} · diupload {d.uploaded_by_nama || '-'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleDownload(d)}
+                  className="text-sm text-ink-600 hover:text-stamp-600 shrink-0"
+                >
+                  Download
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
         <h2 className="font-semibold text-ink-800 mb-1">Metode Pengadaan</h2>
