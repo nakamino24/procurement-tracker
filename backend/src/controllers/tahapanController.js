@@ -37,11 +37,11 @@ async function updateStatus(req, res) {
     // dari "Belum Mulai". Dipakai untuk hitung SLA (target_hari vs realisasi).
     const { rows } = await pool.query(
       `UPDATE pengadaan_tahapan
-       SET status = $1,
+       SET status = $1::tahap_status,
            catatan = COALESCE($2, catatan),
            tanggal_update = now(),
            updated_by = $3,
-           tanggal_mulai_tahap = COALESCE(tanggal_mulai_tahap, CASE WHEN $1 != 'Belum Mulai' THEN now() ELSE NULL END)
+           tanggal_mulai_tahap = COALESCE(tanggal_mulai_tahap, CASE WHEN $1::tahap_status != 'Belum Mulai' THEN now() ELSE NULL END)
        WHERE id = $4 RETURNING *`,
       [status, catatan, req.user.id, id]
     );

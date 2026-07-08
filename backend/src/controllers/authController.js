@@ -37,7 +37,7 @@ async function login(req, res) {
 
 // POST /api/auth/register  (hanya admin yang boleh bikin user baru -> lihat route)
 async function register(req, res) {
-  const { nama, email, password, role } = req.body;
+  const { nama, email, password, role, tim } = req.body;
   if (!nama || !email || !password) {
     return res.status(400).json({ message: 'Nama, email, password wajib diisi.' });
   }
@@ -47,9 +47,9 @@ async function register(req, res) {
   try {
     const hash = await bcrypt.hash(password, 10);
     const { rows } = await pool.query(
-      `INSERT INTO users (nama, email, password_hash, role)
-       VALUES ($1, $2, $3, $4) RETURNING id, nama, email, role`,
-      [nama, email, hash, role === 'admin' ? 'admin' : 'staff']
+      `INSERT INTO users (nama, email, password_hash, role, tim)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id, nama, email, role, tim`,
+      [nama, email, hash, role === 'admin' ? 'admin' : 'staff', tim || null]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -65,7 +65,7 @@ async function register(req, res) {
 async function listUsers(req, res) {
   try {
     const { rows } = await pool.query(
-      'SELECT id, nama, email, role, created_at FROM users ORDER BY nama ASC'
+      'SELECT id, nama, email, role, tim, created_at FROM users ORDER BY nama ASC'
     );
     res.json(rows);
   } catch (err) {

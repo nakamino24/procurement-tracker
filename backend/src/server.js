@@ -6,6 +6,7 @@ const authRoutes = require('./routes/authRoutes');
 const pengadaanRoutes = require('./routes/pengadaanRoutes');
 const tahapanRoutes = require('./routes/tahapanRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
+const dokumenRoutes = require('./routes/dokumenRoutes');
 
 const app = express();
 
@@ -18,6 +19,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/pengadaan', pengadaanRoutes);
 app.use('/api/tahapan', tahapanRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api', dokumenRoutes);
 
 // Handler error terakhir (jaga-jaga)
 app.use((err, req, res, next) => {
