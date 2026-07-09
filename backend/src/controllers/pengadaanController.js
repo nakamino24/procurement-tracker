@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { logAudit } = require('../utils/auditLog');
+const { computeSlaStatus } = require('../utils/slaStatus');
 
 // GET /api/pengadaan?status=Proses&vendor=abc&pic=budi&search=laptop
 // Filter bersifat opsional & bisa digabung. `search` mencari di nama_pengadaan.
@@ -22,7 +23,16 @@ async function getAll(req, res) {
         JOIN tahapan_master tm ON tm.id = pt2.tahapan_master_id
         WHERE pt2.pengadaan_id = p.id AND pt2.status != 'Selesai'
         ORDER BY tm.urutan ASC LIMIT 1
-      ) AS tahap_saat_ini
+      ) AS tahap_saat_ini,
+      hari_kerja_antara(
+        p.tanggal_mulai,
+        CASE
+          WHEN NOT EXISTS (SELECT 1 FROM pengadaan_tahapan ptx WHERE ptx.pengadaan_id = p.id AND ptx.status != 'Selesai')
+          THEN (SELECT MAX(tanggal_update)::date FROM pengadaan_tahapan ptx WHERE ptx.pengadaan_id = p.id)
+          ELSE CURRENT_DATE
+        END
+      ) AS hari_berjalan,
+      NOT EXISTS (SELECT 1 FROM pengadaan_tahapan ptx WHERE ptx.pengadaan_id = p.id AND ptx.status != 'Belum Mulai') AS semua_belum_mulai
     FROM pengadaan p
     LEFT JOIN pengadaan_tahapan pt ON pt.pengadaan_id = p.id
     LEFT JOIN users u ON u.id = p.pic_user_id
@@ -36,7 +46,6 @@ async function getAll(req, res) {
   if (pic) { conditions.push(`u.nama ILIKE $${i++}`); values.push(`%${pic}%`); }
   if (search) { conditions.push(`p.nama_pengadaan ILIKE $${i++}`); values.push(`%${search}%`); }
   if (status) {
-    // filter: pengadaan yang PUNYA minimal satu tahap dengan status ini
     conditions.push(`p.id IN (SELECT pengadaan_id FROM pengadaan_tahapan WHERE status = $${i++})`);
     values.push(status);
   }
@@ -46,7 +55,15 @@ async function getAll(req, res) {
 
   try {
     const { rows } = await pool.query(baseQuery, values);
-    res.json(rows);
+    const withSla = rows.map((r) => ({
+      ...r,
+      sla_status: computeSlaStatus({
+        metodePengadaan: r.metode_pengadaan,
+        hariBerjalan: r.hari_berjalan,
+        semuaBelumMulai: r.semua_belum_mulai,
+      }),
+    }));
+    res.json(withSla);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Gagal mengambil data pengadaan.' });
@@ -58,7 +75,17 @@ async function getById(req, res) {
   const { id } = req.params;
   try {
     const pengadaan = await pool.query(
-      `SELECT p.*, u.nama AS pic_nama FROM pengadaan p
+      `SELECT p.*, u.nama AS pic_nama,
+        hari_kerja_antara(
+          p.tanggal_mulai,
+          CASE
+            WHEN NOT EXISTS (SELECT 1 FROM pengadaan_tahapan pt WHERE pt.pengadaan_id = p.id AND pt.status != 'Selesai')
+            THEN (SELECT MAX(tanggal_update)::date FROM pengadaan_tahapan pt WHERE pt.pengadaan_id = p.id)
+            ELSE CURRENT_DATE
+          END
+        ) AS hari_berjalan,
+        NOT EXISTS (SELECT 1 FROM pengadaan_tahapan pt WHERE pt.pengadaan_id = p.id AND pt.status != 'Belum Mulai') AS semua_belum_mulai
+       FROM pengadaan p
        LEFT JOIN users u ON u.id = p.pic_user_id
        WHERE p.id = $1`,
       [id]
@@ -69,6 +96,12 @@ async function getById(req, res) {
     if (req.user.role === 'staff' && pengadaan.rows[0].pic_user_id !== req.user.id) {
       return res.status(403).json({ message: 'Kamu tidak punya akses ke pengadaan ini.' });
     }
+
+    const sla_status = computeSlaStatus({
+      metodePengadaan: pengadaan.rows[0].metode_pengadaan,
+      hariBerjalan: pengadaan.rows[0].hari_berjalan,
+      semuaBelumMulai: pengadaan.rows[0].semua_belum_mulai,
+    });
 
     const tahapan = await pool.query(
       `SELECT pt.id, pt.status, pt.tanggal_update, pt.catatan, pt.tanggal_mulai_tahap,
@@ -88,7 +121,7 @@ async function getById(req, res) {
       [id]
     );
 
-    res.json({ ...pengadaan.rows[0], tahapan: tahapan.rows });
+    res.json({ ...pengadaan.rows[0], sla_status, tahapan: tahapan.rows });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Gagal mengambil detail pengadaan.' });
@@ -200,13 +233,6 @@ async function removeStageIfUntouched(pengadaanId, kode) {
 }
 
 // PUT /api/pengadaan/:id/metode
-// Menyimpan metode pengadaan/penilaian/kategori putusan/toggle SPK, LALU
-// otomatis menyesuaikan tahap mana yang relevan buat pengadaan ini:
-// - Tender Umum/Terbatas -> tambah tahap "Surat Pengumuman Pemenang"
-// - Penunjukan Langsung  -> tahap itu dihapus (kalau belum dikerjakan)
-// - Sistem Nilai         -> tambah "Penggabungan Nilai", hapus "Auction"
-// - Evaluasi Biaya Terendah -> kebalikannya
-// - pakai_spk toggle     -> tambah/hapus tahap "Surat Perintah Kerja"
 async function updateMetode(req, res) {
   const { id } = req.params;
   const { metode_pengadaan, aspek_positif_pl, aspek_negatif_pl, metode_penilaian, kategori_putusan, pakai_spk } = req.body;
@@ -252,19 +278,14 @@ async function updateMetode(req, res) {
       await removeStageIfUntouched(id, 'surat_perintah_kerja');
     }
 
-    // Due-diligence khusus jalur Komite (Background Checking, PEP, Opini
-    // Legal, Opini Compliance, Opini SORH). Non-komite (GH+GH / DH+GH)
-    // tidak butuh ini.
     const KOMITE_CHECKS = ['background_checking', 'pep', 'opini_legal', 'opini_compliance', 'opini_sorh'];
     const isKomite = ['Komite 1', 'Komite 2', 'Komite 3', 'Komite 4'].includes(updated.kategori_putusan);
     if (isKomite) {
       for (const kode of KOMITE_CHECKS) await ensureStage(id, kode);
     } else if (updated.kategori_putusan) {
-      // kategori_putusan sudah diisi TAPI bukan komite (berarti GH+GH/DH+GH)
       for (const kode of KOMITE_CHECKS) await removeStageIfUntouched(id, kode);
     }
 
-    // Uji Kepatuhan cuma untuk Komite 1 & 2 secara spesifik
     if (['Komite 1', 'Komite 2'].includes(updated.kategori_putusan)) {
       await ensureStage(id, 'uji_kepatuhan');
     } else if (updated.kategori_putusan) {
