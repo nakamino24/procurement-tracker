@@ -14,9 +14,23 @@ const STATUS_COLOR = {
 };
 
 const METODE_PENGADAAN_INFO = {
-  'Tender Umum': 'Nilai anggaran > Rp5 Miliar',
-  'Tender Terbatas': 'Nilai anggaran Rp500 Juta – Rp5 Miliar',
-  'Penunjukan Langsung': 'Wajib isi aspek positif & negatif bila dikerjakan provider lain',
+  'Tender Umum': 'Nilai anggaran > Rp5 Miliar · Target SLA 30 hari kerja',
+  'Tender Terbatas': 'Nilai anggaran Rp500 Juta – Rp5 Miliar · Target SLA 28 hari kerja',
+  'Penunjukan Langsung': 'Wajib isi aspek positif & negatif · Target SLA 9 hari kerja',
+  'Seleksi Langsung': 'Target SLA 28 hari kerja',
+  'Kontrak Payung': 'Target SLA 0 hari kerja',
+  'Sewa Properti': 'Target SLA 5 hari kerja',
+  'Beli Properti': 'Target SLA 21 hari kerja',
+  'Swakelola': 'Target SLA 5 hari kerja',
+  'Addendum': 'Tidak dihitung SLA-nya',
+};
+
+const SLA_BADGE_COLOR = {
+  '✅ ON SCHEDULE': 'bg-emerald-100 text-emerald-700',
+  '⚠️ OVERDUE': 'bg-red-100 text-red-700',
+  '❌ NOT VALID': 'bg-ink-200 text-ink-700',
+  'Belum Mulai': 'bg-ink-100 text-ink-600',
+  '📝 ADDENDUM': 'bg-blue-100 text-blue-700',
 };
 
 function formatTanggal(dateStr) {
@@ -38,7 +52,7 @@ export default function PengadaanDetail() {
   const [showAudit, setShowAudit] = useState(false);
 
   const [dokumen, setDokumen] = useState([]);
-  const [uploadForm, setUploadForm] = useState({ file: null, kode_kerahasiaan: 'B' });
+  const [uploadForm, setUploadForm] = useState({ file: null, kode_kerahasiaan: 'B', pengadaan_tahapan_id: '' });
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState('');
 
@@ -76,13 +90,15 @@ export default function PengadaanDetail() {
       const fd = new FormData();
       fd.append('file', uploadForm.file);
       fd.append('kode_kerahasiaan', uploadForm.kode_kerahasiaan);
+      if (uploadForm.pengadaan_tahapan_id) fd.append('pengadaan_tahapan_id', uploadForm.pengadaan_tahapan_id);
       const { data } = await api.post(`/pengadaan/${id}/dokumen`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setUploadMsg(`Berhasil! Nomor dokumen: ${data.nomor_dokumen}`);
-      setUploadForm({ file: null, kode_kerahasiaan: 'B' });
+      setUploadForm({ file: null, kode_kerahasiaan: 'B', pengadaan_tahapan_id: '' });
       document.getElementById('file-input').value = '';
       await loadDokumen();
+      await load();
     } catch (err) {
       setUploadMsg(err.response?.data?.message || 'Gagal upload dokumen.');
     } finally {
@@ -149,9 +165,21 @@ export default function PengadaanDetail() {
   return (
     <Layout title={data.nama_pengadaan}>
       <div className="mb-6 flex items-center justify-between">
-        <p className="text-ink-600 text-sm mt-1">
-          Vendor: {data.vendor || '-'} · PIC: {data.pic_nama || data.pic || '-'} · Nilai: Rp{Number(data.nilai_kontrak).toLocaleString('id-ID')}
-        </p>
+        <div>
+          <p className="text-ink-600 text-sm mt-1">
+            Vendor: {data.vendor || '-'} · PIC: {data.pic_nama || data.pic || '-'} · Nilai: Rp{Number(data.nilai_kontrak).toLocaleString('id-ID')}
+          </p>
+          {data.sla_status && (
+            <div className="flex items-center gap-2 mt-2">
+              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${SLA_BADGE_COLOR[data.sla_status] || 'bg-ink-100 text-ink-600'}`}>
+                {data.sla_status}
+              </span>
+              {data.hari_berjalan != null && !data.semua_belum_mulai && data.metode_pengadaan !== 'Addendum' && (
+                <span className="text-xs text-ink-400">{data.hari_berjalan} hari kerja berjalan</span>
+              )}
+            </div>
+          )}
+        </div>
         <button
           onClick={toggleAudit}
           className="flex items-center gap-1.5 text-sm text-ink-600 hover:text-stamp-600 shrink-0"
@@ -214,6 +242,19 @@ export default function PengadaanDetail() {
               <option value="SR">SR — Sangat Rahasia</option>
             </select>
           </div>
+          <div>
+            <label className="text-sm text-ink-600 block mb-1">Kaitkan ke Tahap (opsional)</label>
+            <select
+              value={uploadForm.pengadaan_tahapan_id}
+              onChange={(e) => setUploadForm({ ...uploadForm, pengadaan_tahapan_id: e.target.value })}
+              className="border border-ink-100 rounded px-3 py-2 text-sm max-w-[220px]"
+            >
+              <option value="">Tidak dikaitkan</option>
+              {data.tahapan.map((t) => (
+                <option key={t.id} value={t.id}>{t.urutan}. {t.nama_tahap}</option>
+              ))}
+            </select>
+          </div>
           <button
             type="submit" disabled={uploading}
             className="bg-ink-900 text-white rounded px-5 py-2 text-sm hover:bg-ink-800 disabled:opacity-50"
@@ -269,6 +310,12 @@ export default function PengadaanDetail() {
               <option value="Tender Umum">Tender Umum</option>
               <option value="Tender Terbatas">Tender Terbatas</option>
               <option value="Penunjukan Langsung">Penunjukan Langsung</option>
+              <option value="Seleksi Langsung">Seleksi Langsung</option>
+              <option value="Kontrak Payung">Kontrak Payung</option>
+              <option value="Sewa Properti">Sewa Properti</option>
+              <option value="Beli Properti">Beli Properti</option>
+              <option value="Swakelola">Swakelola</option>
+              <option value="Addendum">Addendum</option>
             </select>
             {metode.metode_pengadaan && (
               <p className="text-xs text-ink-400 mt-1">{METODE_PENGADAAN_INFO[metode.metode_pengadaan]}</p>

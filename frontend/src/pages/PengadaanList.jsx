@@ -6,6 +6,13 @@ import api from '../api/axios';
 import { FileDown, FileSpreadsheet } from 'lucide-react';
 
 const STATUS_OPTIONS = ['', 'Belum Mulai', 'Proses', 'Selesai', 'Tertunda'];
+const SLA_BADGE_COLOR = {
+  '✅ ON SCHEDULE': 'bg-emerald-100 text-emerald-700',
+  '⚠️ OVERDUE': 'bg-red-100 text-red-700',
+  '❌ NOT VALID': 'bg-ink-200 text-ink-700',
+  'Belum Mulai': 'bg-ink-100 text-ink-600',
+  '📝 ADDENDUM': 'bg-blue-100 text-blue-700',
+};
 
 export default function PengadaanList() {
   const [searchParams] = useSearchParams();
@@ -101,7 +108,14 @@ export default function PengadaanList() {
                   {(p.pic_nama || '-').slice(0, 2).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-ink-800 truncate">{p.nama_pengadaan}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-ink-800 truncate">{p.nama_pengadaan}</p>
+                    {p.sla_status && (
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium shrink-0 ${SLA_BADGE_COLOR[p.sla_status] || 'bg-ink-100 text-ink-600'}`}>
+                        {p.sla_status}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-ink-400">{p.vendor || 'Belum ada vendor'} · PIC: {p.pic_nama || '-'}</p>
                 </div>
                 <div className="w-32 shrink-0">
